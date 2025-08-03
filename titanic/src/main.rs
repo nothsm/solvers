@@ -23,9 +23,6 @@ fn test_file() -> String {
     String::from(DATA_DIR) + TEST_FILE
 }
 
-/*
- * TODO: This function is really unsafe right now.
- */
 fn slurp(file: &str) -> std::io::Result<String> {
     /*
      * Pre: TODO
@@ -40,22 +37,24 @@ fn slurp(file: &str) -> std::io::Result<String> {
 }
 
 /*
- * TODO: Change this repr
+ * TODO: Change this repr.
+ * TODO: I should use Struct-of-Arrays rather than an Array-of-Structs.
  */
 #[repr(C)]
 #[derive(Debug)]
 struct Variable {
-    id: u32,
-    p_class: u32,
+    id: i128,
+    survived: bool,
+    ticket_class: i128,
     name: String,
     sex: String,
-    age: f32,
-    sibsp: u32,
-    p_arch: u32,
-    ticket: String,
-    fare: f32,
-    cabin: Option<String>,
-    embarked: String,
+    age: Option<f64>,
+    sibling_spouse: i128,
+    parent_child: i128,
+    ticket_no: String,
+    fare: f64,
+    cabin_no: Option<String>,
+    embark_port: String,
 }
 
 #[repr(C)]
@@ -65,44 +64,41 @@ struct Objective {
 }
 
 /*
- * TODO: This could be more generic, and more efficient.
+ * TODO: This procedure performs a LOT of unnecessary cloning. How can I make
+ *       this more efficient?
  */
-fn fields(s: &str) -> Vec<&str> {
-    /*
-     * Pre: TODO
-     */
-    s.split(',').collect()
-    /*
-     * Post: TODO
-     */
-}
-
 fn make_variable(
-    id: u32,
+    id: i128,
     survived: bool,
-    p_class: u32,
-    name: String,
-    sex: String,
-    age: f32,
-    sibsp: u32,
-    p_arch: u32,
-    ticket: String,
-    fare: f32,
-    cabin: Option<String>,
-    embarked: String,
+    ticket_class: i128,
+    name: &str,
+    sex: &str,
+    age: Option<f64>,
+    sibling_spouse: i128,
+    parent_child: i128,
+    ticket_no: &str,
+    fare: f64,
+    cabin_no: Option<&str>,
+    embark_port: &str,
 ) -> Variable {
+    let name = name.to_string();
+    let sex = sex.to_string();
+    let ticket_no = ticket_no.to_string();
+    let cabin_no = cabin_no.map(|s| s.to_string());
+    let embark_port = embark_port.to_string();
     Variable {
-        id: id,
-        p_class: p_class,
-        name: name,
-        sex: sex,
-        age: age,
-        sibsp: sibsp,
-        p_arch: p_arch,
-        ticket: ticket,
-        fare: fare,
-        cabin: cabin,
-        embarked: embarked,
+        id,
+        survived,
+        ticket_class,
+        name,
+        sex,
+        age,
+        sibling_spouse,
+        parent_child,
+        ticket_no,
+        fare,
+        cabin_no,
+        embark_port,
     }
 }
 
@@ -131,12 +127,14 @@ fn record_split(s: &str) -> Vec<String> {
             let delim = b'\"';
             /*
              * Inv: TODO
+             *
+             * TODO: This loop is super unsafe.
              */
-            while end < n && cs[end] != delim {
+            while end < n && !(cs[end] == delim && cs[end + 1] == b',') {
                 end += 1;
             }
             acc.push(String::from_utf8_lossy(&cs[start..end]).into_owned());
-            start = end + 2; /* Skip last quotation mark, and comma */
+            start = end + 2; /* Skip last (1) quotation mark, and (2) comma */
         } else {
             let mut end = start;
             let delim = b',';
@@ -150,8 +148,14 @@ fn record_split(s: &str) -> Vec<String> {
              * TODO: Fix this.
              */
             acc.push(String::from_utf8_lossy(&cs[start..end]).into_owned());
-            start = end + 1; /* Skip comma */
+            start = end + 1; /* Skip (1) comma */
         }
+    }
+    /*
+     * TODO: Why is this correct? (special case where last field is empty)
+     */
+    if cs[n - 1] == b',' {
+        acc.push("".to_string());
     }
     /*
      * Post: TODO
@@ -159,6 +163,9 @@ fn record_split(s: &str) -> Vec<String> {
     acc
 }
 
+/*
+ * TODO: This function is unsafe. It should properly handle errors.
+ */
 fn variable_parse(s: &str) -> Result<Variable, &'static str> {
     /*
      * Pre: TODO
@@ -166,8 +173,55 @@ fn variable_parse(s: &str) -> Result<Variable, &'static str> {
     let fields = &record_split(s)[..];
     debug_assert!(fields.len() == N_VARIABLES);
 
-    // let [id, survived, p_class]
-    todo!()
+    let [
+        id,
+        survived,
+        ticket_class,
+        name,
+        sex,
+        age,
+        sibling_spouse,
+        parent_child,
+        ticket,
+        fare,
+        cabin_no,
+        embark_port,
+    ] = fields
+    else {
+        todo!()
+    };
+
+    Ok(make_variable(
+        id.parse().expect("variable_parse: failed to parse id"),
+        survived
+            .parse::<u32>()
+            .expect("variable_parse: failed to parse survived")
+            != 0,
+        ticket_class
+            .parse()
+            .expect("variable_parse: failed to parse ticket_class"),
+        name,
+        sex,
+        if let Ok(a) = age.parse() {
+            Some(a)
+        } else {
+            None
+        },
+        sibling_spouse
+            .parse()
+            .expect("variable_parse: failed to parse sibling_spouse"),
+        parent_child
+            .parse()
+            .expect("variable_parse: failed to parse parent_child"),
+        ticket,
+        fare.parse().expect("variable_parse: failed to parse fare"),
+        if cabin_no.len() > 0 {
+            Some(cabin_no)
+        } else {
+            None
+        },
+        embark_port,
+    ))
     /*
      * Post: TODO
      */
@@ -176,14 +230,18 @@ fn variable_parse(s: &str) -> Result<Variable, &'static str> {
 /*
  * TODO: Update this to use a (eventually custom) hashmap instead.
  */
-fn csv_parse(s: &str) -> Vec<Variable> {
+fn csv_parse(s: &str) -> Result<Vec<Variable>, &'static str> {
     /*
      * Pre: TODO
      */
-
-    unimplemented!();
-    // let ls = s.lines().skip(1);
-    // ls.map(variable_parse).collect()
+    let mut acc = vec![];
+    /*
+     * Inv: TODO
+     */
+    for line in s.lines().skip(1) {
+        acc.push(variable_parse(line)?);
+    }
+    Ok(acc)
     /*
      * Post: TODO
      */
@@ -193,8 +251,8 @@ fn main() -> std::io::Result<()> {
     let contents = slurp(&train_file())?;
     println!("{}", &contents[..1000]);
 
-    // let dataset = csv_parse(&contents);
-    // println!("{:#?}", &dataset[..10]);
+    let dataset = csv_parse(&contents).expect("main: csv parse error");
+    println!("{:#?}", &dataset[..]);
 
     Ok(())
 }
@@ -223,10 +281,14 @@ mod test {
     }
 
     #[test]
+    /*
+     * TODO: Add a test case for missing last field.
+     */
     fn record_split_test() {
         let s = r#"1,0,3,"Braund, Mr. Owen Harris",male,22,1,0,A/5 21171,7.25,,S"#;
+        let record = record_split(s);
         ppr_check(
-            record_split(s),
+            record,
             expect![[r#"
             [
                 "1",
@@ -248,7 +310,174 @@ mod test {
     #[test]
     fn variable_parse_test() {
         let s = r#"1,0,3,"Braund, Mr. Owen Harris",male,22,1,0,A/5 21171,7.25,,S"#;
-        dbg_check(variable_parse(s).unwrap(), expect![]);
+        let var = variable_parse(s).unwrap();
+        ppr_check(
+            var,
+            expect![[r#"
+                Variable {
+                    id: 1,
+                    survived: false,
+                    ticket_class: 3,
+                    name: "Braund, Mr. Owen Harris",
+                    sex: "male",
+                    age: Some(
+                        22.0,
+                    ),
+                    sibling_spouse: 1,
+                    parent_child: 0,
+                    ticket_no: "A/5 21171",
+                    fare: 7.25,
+                    cabin_no: None,
+                    embark_port: "S",
+                }"#]],
+        );
+
+        let s = r#"6,0,3,"Moran, Mr. James",male,,0,0,330877,8.4583,,Q"#;
+        let var = variable_parse(s).unwrap();
+        ppr_check(
+            var,
+            expect![[r#"
+                Variable {
+                    id: 6,
+                    survived: false,
+                    ticket_class: 3,
+                    name: "Moran, Mr. James",
+                    sex: "male",
+                    age: None,
+                    sibling_spouse: 0,
+                    parent_child: 0,
+                    ticket_no: "330877",
+                    fare: 8.4583,
+                    cabin_no: None,
+                    embark_port: "Q",
+                }"#]],
+        )
+    }
+
+    #[test]
+    fn csv_parse_test() {
+        let s = slurp(&train_file()).unwrap();
+
+        let csv = csv_parse(&s).unwrap();
+        let N = csv.len();
+
+        let n = 3;
+
+        let first_n = &csv[..n];
+        ppr_check(
+            first_n,
+            expect![[r#"
+                [
+                    Variable {
+                        id: 1,
+                        survived: false,
+                        ticket_class: 3,
+                        name: "Braund, Mr. Owen Harris",
+                        sex: "male",
+                        age: Some(
+                            22.0,
+                        ),
+                        sibling_spouse: 1,
+                        parent_child: 0,
+                        ticket_no: "A/5 21171",
+                        fare: 7.25,
+                        cabin_no: None,
+                        embark_port: "S",
+                    },
+                    Variable {
+                        id: 2,
+                        survived: true,
+                        ticket_class: 1,
+                        name: "Cumings, Mrs. John Bradley (Florence Briggs Thayer)",
+                        sex: "female",
+                        age: Some(
+                            38.0,
+                        ),
+                        sibling_spouse: 1,
+                        parent_child: 0,
+                        ticket_no: "PC 17599",
+                        fare: 71.2833,
+                        cabin_no: Some(
+                            "C85",
+                        ),
+                        embark_port: "C",
+                    },
+                    Variable {
+                        id: 3,
+                        survived: true,
+                        ticket_class: 3,
+                        name: "Heikkinen, Miss. Laina",
+                        sex: "female",
+                        age: Some(
+                            26.0,
+                        ),
+                        sibling_spouse: 0,
+                        parent_child: 0,
+                        ticket_no: "STON/O2. 3101282",
+                        fare: 7.925,
+                        cabin_no: None,
+                        embark_port: "S",
+                    },
+                ]"#]],
+        );
+
+        let last_n = &csv[((N - n) - 1)..(N - 1)];
+        ppr_check(
+            last_n,
+            expect![[r#"
+                [
+                    Variable {
+                        id: 888,
+                        survived: true,
+                        ticket_class: 1,
+                        name: "Graham, Miss. Margaret Edith",
+                        sex: "female",
+                        age: Some(
+                            19.0,
+                        ),
+                        sibling_spouse: 0,
+                        parent_child: 0,
+                        ticket_no: "112053",
+                        fare: 30.0,
+                        cabin_no: Some(
+                            "B42",
+                        ),
+                        embark_port: "S",
+                    },
+                    Variable {
+                        id: 889,
+                        survived: false,
+                        ticket_class: 3,
+                        name: "Johnston, Miss. Catherine Helen \"\"Carrie\"\"",
+                        sex: "female",
+                        age: None,
+                        sibling_spouse: 1,
+                        parent_child: 2,
+                        ticket_no: "W./C. 6607",
+                        fare: 23.45,
+                        cabin_no: None,
+                        embark_port: "S",
+                    },
+                    Variable {
+                        id: 890,
+                        survived: true,
+                        ticket_class: 1,
+                        name: "Behr, Mr. Karl Howell",
+                        sex: "male",
+                        age: Some(
+                            26.0,
+                        ),
+                        sibling_spouse: 0,
+                        parent_child: 0,
+                        ticket_no: "111369",
+                        fare: 30.0,
+                        cabin_no: Some(
+                            "C148",
+                        ),
+                        embark_port: "C",
+                    },
+                ]"#]],
+        );
     }
 }
 
@@ -262,4 +491,5 @@ mod test {
  * - [ ] How is File::create implemented?
  * - [ ] How is Vec implemented?
  * - [ ] Write custom String::lines() function.
+ * - [ ] Fix project structure in emacs.
  */
