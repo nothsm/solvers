@@ -9,6 +9,7 @@
 
 import math
 import os
+import sys
 import time
 
 import matplotlib.pyplot as plt
@@ -20,12 +21,12 @@ DEPTH = int(os.getenv('DEPTH', 4))
 SPEC = os.getenv('SPEC', 'add1')
 PRINT_EVERY = int(os.getenv('PRINT_EVERY', 1_000_000))
 
-CONSTANTS = ['x', 'y', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '-1', '-2', '-3', '-4', '-5', '-6', '-7', '-8', '-9']
-UNOPS = ['f', 'recip']
+CONSTANTS = ['x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '-1', '-2', '-3', '-4', '-5', '-6', '-7', '-8', '-9']
+UNOPS = ['recip', 'sqrt', 'cat']
 BINOPS = ['add', 'mul', 'eq', 'le']
 TERNOPS = ['if']
 
-SYMBOLS = {'x', 'y'}
+SYMBOLS = {'x', 'y', 'z'}
 
 # CACHE_SIZE = 2048
 CACHE_SIZE = 0
@@ -81,44 +82,42 @@ def pshow(p):
     elif len(p) == 3:
         (a1, a2, op) = p
         return f"{pshow(op)}({pshow(a1)}, {pshow(a2)})"
-    elif len(p) == 4:
-        (a1, a2, a3, op) = p
-        return f"{pshow(op)}({pshow(a1)}, {pshow(a2)}, {pshow(a3)})"
-    elif len(p) == 5:
-        (a1, a2, a3, a4, op) = p
-        return f"{pshow(op)}({pshow(a1)}, {pshow(a2)}, {pshow(a3)}, {pshow(a4)})"
-    elif len(p) == 6:
-        (a1, a2, a3, a4, a5, op) = p
-        return f"{pshow(op)}({pshow(a1)}, {pshow(a2)}, {pshow(a3)}, {pshow(a4)}, {pshow(a5)})"
+    # elif len(p) == 4:
+    #     (a1, a2, a3, op) = p
+    #     return f"{pshow(op)}({pshow(a1)}, {pshow(a2)}, {pshow(a3)})"
+    # elif len(p) == 5:
+    #     (a1, a2, a3, a4, op) = p
+    #     return f"{pshow(op)}({pshow(a1)}, {pshow(a2)}, {pshow(a3)}, {pshow(a4)})"
+    # elif len(p) == 6:
+    #     (a1, a2, a3, a4, a5, op) = p
+    #     return f"{pshow(op)}({pshow(a1)}, {pshow(a2)}, {pshow(a3)}, {pshow(a4)}, {pshow(a5)})"
     else:
-        raise ValueError(f"badsci: pshow: unexpected number of args ({len(p)})")
+        raise ValueError(f"nth: pshow: unexpected number of args ({len(p)})")
 
 # TODO
 def pparse(s):
     ...
 
-def pnumfree(p):
-    def go(p, acc):
+def pfreevars(p):
+    freevars = set()
+    def go(p):
         is_constant = isinstance(p, str)
 
         if is_constant:
             if p in SYMBOLS:
-                acc.add(p)
+                freevars.add(p)
         else:
             assert isinstance(p, tuple)
 
             # constants have no operation
             if len(p) == 1:
                 (c, ) = p
-                go(c, acc)
+                go(c)
             else:
                 for arg in p[:-1]: # drop the last operation
-                    go(arg, acc)
-
-    acc = set()
-    go(p, acc)
-    return len(acc)
-
+                    go(arg)
+    go(p)
+    return freevars
 
 def pcompile0(p):
     (c, ) = p
@@ -137,14 +136,18 @@ def pcompile1(p):
 
     g = pcompile(a)
 
-    if op == 'f':
-        def f(x, n=10):
-            if n == 0:
-                return None
-
-            return f(g(x), n=n-1)
+    if op == 'recip':
+        def f(x):
+            return 1 / g(x)
+    elif op == 'sqrt':
+        def f(x):
+            return g(x) ** 0.5
+    elif op == 'cat':
+        def f(x):
+            v = g(x)
+            return (v, v)
     else:
-        raise ValueError(f"badsci: pcompile1: unexpected operation ({op})")
+        raise ValueError(f"nth: pcompile1: unexpected operation ({op})")
 
     return f
 
@@ -159,19 +162,30 @@ def pcompile2(p):
     f1 = pcompile(a1)
     f2 = pcompile(a2)
 
-    if op == 'add':
-        def f(x):
-            return f1(x) + f2(x)
-    elif op == 'mul':
-        def f(x):
-            return f1(x) * f2(x)
-    elif op == 'le':
-        def f(x):
-            return f1(x) <= f2(x)
+    nfree = len(pfreevars(p))
+
+    if nfree <= 1:
+        if op == 'mul':
+            def f(x):
+                return f1(x) * f2(x)
+        else:
+            raise ValueError(f"nth: pcompile2: unexpected operation ({op})")
     else:
-        raise ValueError(f"badsci: pcompile2: unexpected operation ({op})")
+        raise ValueError(f"nth: pcompile2: unexpected number of free vars ({nfree}), {pshow(p)}")
 
     return f
+
+    # if op == 'add':
+    #     def f(x):
+    #         return f1(x) + f2(x)
+    # elif op == 'mul':
+    #     def f(x):
+    #         return f1(x) * f2(x)
+    # elif op == 'le':
+    #     def f(x):
+    #         return f1(x) <= f2(x)
+    # else:
+    #     raise ValueError(f"nth: pcompile2: unexpected operation ({op})")
 
 def pcompile5(p):
     (a1, a2, binop, a3, a4, op) = p
@@ -202,9 +216,9 @@ def pcompile5(p):
                 else:
                     return f(decl(x), n=n-1) <= f(decr(x), n=n-1)
         else:
-            raise ValueError(f"badsci: pcompile5: unexpected binary op ({binop})")
+            raise ValueError(f"nth: pcompile5: unexpected binary op ({binop})")
     else:
-        raise ValueError(f"badsci: pcompile5: unexpected operation ({op})")
+        raise ValueError(f"nth: pcompile5: unexpected operation ({op})")
 
     return f
 
@@ -217,10 +231,8 @@ def pcompile(p):
         return pcompile1(p)
     elif narg == 2:
         return pcompile2(p)
-    elif narg == 5:
-        return pcompile5(p)
     else:
-        raise ValueError(f"badsci: pcompile: pcompile doesnt support {narg} args")
+        raise ValueError(f"nth: pcompile: pcompile doesnt support {narg} args")
 
 def peval():
     ...
@@ -292,10 +304,11 @@ def pmc():
 
 def main():
     # dsl: (arithmetic/peano)
-    consts = ['x', 'y', '0', '1', '2', '-1', '-2'] # TODO: restore the rest of the negatives
+    consts = ['x', 'y', 'z', '0', '1', '2', '-1', '-2'] # TODO: restore the rest of the negatives
     # unops = ['f']
-    unops = []
-    binops = ['add', 'mul', 'le']
+    unops = ['recip', 'sqrt', 'cat']
+    # binops = ['add', 'mul', 'le']
+    binops = ['mul']
     # ternops = ['if']
     # ternops = ['add3']
     ternops = []
@@ -322,7 +335,7 @@ def main():
     elif SPEC == 'fib':
         spec = FIB_DATA
     else:
-        raise ValueError(f'badsci: main: unrecognized spec ({SPEC})')
+        raise ValueError(f'nth: main: unrecognized spec ({SPEC})')
 
     tic = time.perf_counter_ns()
     programs = penumerate(dsl)
@@ -334,9 +347,18 @@ def main():
     if VERIFY:
         for ps in programs:
             for p in ps:
-                f = pcompile(p)
-                if all(f(x) == t for (x, t) in spec):
-                    candidates.append((p, f))
+                try:
+                    f = pcompile(p)
+                except:
+                    print(f"BADCOMPILE!!! {pshow(p)}", file=sys.stderr)
+                    continue
+                for (x, t) in spec:
+                    try:
+                        if f(x) != t:
+                            break
+                    except:
+                        print(f"ERROR!!! ({x}, {pshow(p)})", file=sys.stderr)
+                        break
 
     if DEBUG:
         for (p, f) in candidates:
@@ -345,12 +367,12 @@ def main():
         for ps in programs:
             print()
             for p in ps:
-                print(pshow(p), p, pnumfree(p))
+                print(pshow(p), p, pfreevars(p))
 
         print()
-        print(f"badsci: dt: {dt}ns")
-        print("badsci: programs:", sum(len(ps) for ps in programs))
-        print("badsci: candidates:", len(candidates))
+        print(f"nth: dt: {dt}ns")
+        print("nth: programs:", sum(len(ps) for ps in programs))
+        print("nth: candidates:", len(candidates))
 
 if __name__ == '__main__':
     main()
@@ -503,4 +525,7 @@ problems:
   - symbolic regression
   - recursive programming
   - physical laws
+- probably used ebm for efficient search
+
+- should try out rosette, smt solvers
 """
