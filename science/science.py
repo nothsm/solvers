@@ -10,19 +10,22 @@
 import math
 import os
 import time
-from functools import lru_cache
 
 import matplotlib.pyplot as plt
 import numpy as np
 
-COLLECT_LAST = bool(int(os.getenv('COLLECT_LAST', False)))
 DEBUG = bool(os.getenv('DEBUG', False))
 VERIFY = bool(os.getenv('VERIFY', False))
 DEPTH = int(os.getenv('DEPTH', 4))
 SPEC = os.getenv('SPEC', 'add1')
 PRINT_EVERY = int(os.getenv('PRINT_EVERY', 1_000_000))
 
-SYMBOLS = {'x'}
+CONSTANTS = ['x', 'y', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '-1', '-2', '-3', '-4', '-5', '-6', '-7', '-8', '-9']
+UNOPS = ['f', 'recip']
+BINOPS = ['add', 'mul', 'eq', 'le']
+TERNOPS = ['if']
+
+SYMBOLS = {'x', 'y'}
 
 # CACHE_SIZE = 2048
 CACHE_SIZE = 0
@@ -90,6 +93,33 @@ def pshow(p):
     else:
         raise ValueError(f"badsci: pshow: unexpected number of args ({len(p)})")
 
+# TODO
+def pparse(s):
+    ...
+
+def pnumfree(p):
+    def go(p, acc):
+        is_constant = isinstance(p, str)
+
+        if is_constant:
+            if p in SYMBOLS:
+                acc.add(p)
+        else:
+            assert isinstance(p, tuple)
+
+            # constants have no operation
+            if len(p) == 1:
+                (c, ) = p
+                go(c, acc)
+            else:
+                for arg in p[:-1]: # drop the last operation
+                    go(arg, acc)
+
+    acc = set()
+    go(p, acc)
+    return len(acc)
+
+
 def pcompile0(p):
     (c, ) = p
 
@@ -117,6 +147,11 @@ def pcompile1(p):
         raise ValueError(f"badsci: pcompile1: unexpected operation ({op})")
 
     return f
+
+"""
+(('x',), ('y',), 'add')
+
+"""
 
 def pcompile2(p):
     (a1, a2, op) = p
@@ -235,6 +270,8 @@ def penumerate(dsl):
                         for s in frontier:
                             for t in frontier:
                                 prog = (p, q, binop, s, t, op)
+                                print(prog)
+                                assert False
                                 ps.add(prog)
 
         programs.append(ps)
@@ -254,9 +291,8 @@ def pmc():
     ...
 
 def main():
-    # dsl (arithmetic/peano)
-
-    consts = ['x', '0', '1', '2', '-1', '-2'] # TODO: restore the rest of the negatives
+    # dsl: (arithmetic/peano)
+    consts = ['x', 'y', '0', '1', '2', '-1', '-2'] # TODO: restore the rest of the negatives
     # unops = ['f']
     unops = []
     binops = ['add', 'mul', 'le']
@@ -271,9 +307,11 @@ def main():
         0: consts,
         1: unops,
         2: binops,
-        3: ternops,
+        # 3: ternops,
+        3: [],
         4: [],
-        5: quinops
+        # 5: quinops
+        5: []
     }
 
     spec = ''
@@ -286,103 +324,17 @@ def main():
     else:
         raise ValueError(f'badsci: main: unrecognized spec ({SPEC})')
 
-    programs = [set(), {(c,) for c in dsl[0]}]
-    candidates = []
-
     tic = time.perf_counter_ns()
-
-    depth = 2
-    i = 0
-    while depth < DEPTH:
-        ps = set()
-        frontier = [p for ps in programs for p in ps]
-
-        # generate all uops
-        for op in dsl[1]:
-            for p in frontier:
-                prog = (p, op)
-
-                i += 1
-                if PRINT_EVERY > 0 and i % PRINT_EVERY == 0:
-                    print(i, pshow(prog))
-
-                if depth < DEPTH - 1 or (depth == DEPTH - 1 and COLLECT_LAST):
-                    ps.add(prog)
-
-        # generate all binops
-        for op in dsl[2]:
-            for p in frontier:
-                for q in frontier:
-                    prog = (p, q, op)
-
-                    i += 1
-                    if PRINT_EVERY > 0 and i % PRINT_EVERY == 0:
-                        print(i, pshow(prog))
-
-                    if depth < DEPTH - 1 or (depth == DEPTH - 1 and COLLECT_LAST):
-                        ps.add(prog)
-
-        # generate all ternops
-        for op in dsl[3]:
-            for p in frontier:
-                for q in frontier:
-                    for r in frontier:
-                        prog = (p, q, r, op)
-
-                        i += 1
-                        if PRINT_EVERY > 0 and i % PRINT_EVERY == 0:
-                            print(i, pshow(prog))
-
-                        if depth < DEPTH - 1 or (depth == DEPTH - 1 and COLLECT_LAST):
-                            ps.add(prog)
-
-        # generate all quartops
-        for op in dsl[4]:
-            for p in frontier:
-                for q in frontier:
-                    for r in frontier:
-                        for s in frontier:
-                            prog = (p, q, r, s, op)
-
-                            i += 1
-                            if PRINT_EVERY > 0 and i % PRINT_EVERY == 0:
-                                print(i, pshow(prog))
-
-                            if depth < DEPTH - 1 or (depth == DEPTH - 1 and COLLECT_LAST):
-                                ps.add(prog)
-
-        # generate all quinops
-        if depth == DEPTH - 1:
-            for op in dsl[5]:
-                for p in frontier:
-                    for q in frontier:
-                        for binop in binops:
-                            for s in frontier:
-                                for t in frontier:
-                                    prog = (p, q, binop, s, t, op)
-
-                                    i += 1
-                                    if PRINT_EVERY > 0 and i % PRINT_EVERY == 0:
-                                        print(i, pshow(prog))
-
-                                    f = pcompile(prog)
-                                    if all(f(x) == t for (x, t) in FIB_DATA):
-                                        print(f"{GREEN}{pshow(prog)}{RESET}")
-                                        candidates.append((prog, f))
-
-                                    if depth < DEPTH - 1 or (depth == DEPTH - 1 and COLLECT_LAST):
-                                        ps.add(prog)
-
-        programs.append(ps)
-        depth += 1
+    programs = penumerate(dsl)
     dt = time.perf_counter_ns() - tic
 
+    myprog = (('0',), ('0',), 'add', ('0',), ('0',), 'treerec')
+
+    candidates = []
     if VERIFY:
         for ps in programs:
             for p in ps:
                 f = pcompile(p)
-
-                tic = time.time()
                 if all(f(x) == t for (x, t) in spec):
                     candidates.append((p, f))
 
@@ -393,17 +345,15 @@ def main():
         for ps in programs:
             print()
             for p in ps:
-                print(pshow(p))
+                print(pshow(p), p, pnumfree(p))
 
         print()
         print(f"badsci: dt: {dt}ns")
         print("badsci: programs:", sum(len(ps) for ps in programs))
         print("badsci: candidates:", len(candidates))
 
-
 if __name__ == '__main__':
     main()
-
 
 """
 f(0) = 1
@@ -534,4 +484,23 @@ if(le(x, 1),
 ---
 
 if(0, 1, f(add(x, -1)))
+"""
+
+"""
+problems:
+- ARC
+- OEIS
+- superoptimization
+- fib
+- bad science
+- qsort
+- dreamcoder
+  - list processing
+  - text editing
+  - regexes
+  - LOGO graphics
+  - block towers
+  - symbolic regression
+  - recursive programming
+  - physical laws
 """
