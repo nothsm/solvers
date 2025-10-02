@@ -1,9 +1,11 @@
-#!/usr/bin/env -S PYTHON_JIT=1 uv run --script
+#!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.13"
 # dependencies = [
 #   "numpy",
-#   "matplotlib"
+#   "matplotlib",
+#   "scipy",
+#   "sympy"
 # ]
 # ///
 
@@ -11,6 +13,7 @@ import math
 import os
 import sys
 import time
+import operator as op
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -28,8 +31,15 @@ TERNOPS = ['if']
 
 SYMBOLS = {'x', 'y', 'z'}
 
-# CACHE_SIZE = 2048
-CACHE_SIZE = 0
+OPS = {
+    'recip': lambda x: 1 / x,
+    'sqrt': math.sqrt,
+    'cat': lambda x: (x, x),
+    'add': op.add,
+    'mul': op.mul,
+    'eq': op.eq,
+    'le': op.le
+}
 
 RED = "\033[91m"
 BLUE = "\033[34m"
@@ -136,25 +146,25 @@ def pcompile1(p):
 
     g = pcompile(a)
 
-    if op == 'recip':
-        def f(x):
-            return 1 / g(x)
-    elif op == 'sqrt':
-        def f(x):
-            return g(x) ** 0.5
-    elif op == 'cat':
-        def f(x):
-            v = g(x)
-            return (v, v)
-    else:
-        raise ValueError(f"nth: pcompile1: unexpected operation ({op})")
+    # if op == 'recip':
+    #     def f(x):
+    #         return 1 / g(x)
+    # elif op == 'sqrt':
+    #     def f(x):
+    #         return g(x) ** 0.5
+    # elif op == 'cat':
+    #     def f(x):
+    #         v = g(x)
+    #         return (v, v)
+    # else:
+    #     raise ValueError(f"nth: pcompile1: unexpected operation ({op})")
+
+    o = OPS[op]
+
+    def f(x):
+        return o(g(x))
 
     return f
-
-"""
-(('x',), ('y',), 'add')
-
-"""
 
 def pcompile2(p):
     (a1, a2, op) = p
@@ -170,6 +180,26 @@ def pcompile2(p):
                 return f1(x) * f2(x)
         else:
             raise ValueError(f"nth: pcompile2: unexpected operation ({op})")
+    elif nfree == 2:
+        if len(pfreevars(a1)) == 1 and len(pfreevars(a2)) == 1:
+            if op == 'mul':
+                def f(x):
+                    (x, y) = x
+                    return f1(x) * f2(y)
+            else:
+                raise ValueError(f"nth: pcompile2: unexpected operation ({op})")
+        elif len(pfreevars(a1)) == 2 and len(pfreevars(a2)) == 0:
+            if op == 'mul':
+                def f(x1, x2):
+                    return f1(x1, x2) * f2((x1, x2))
+        elif len(pfreevars(a1)) == 0 and len(pfreevars(a2)) == 2:
+            if op == 'mul':
+                def f(x1, x2):
+                    return f1((x1, x2)) * f2(x1, x2)
+            else:
+                raise ValueError(f"nth: pcompile2: unexpected operation ({op})")
+        else:
+            raise ValueError(f"nth: pcompile2: unexpected combiunation of frevars ({len(pfreevars(a1)), len(pfreevars(a2))})")
     else:
         raise ValueError(f"nth: pcompile2: unexpected number of free vars ({nfree}), {pshow(p)}")
 
@@ -306,9 +336,11 @@ def main():
     # dsl: (arithmetic/peano)
     consts = ['x', 'y', 'z', '0', '1', '2', '-1', '-2'] # TODO: restore the rest of the negatives
     # unops = ['f']
-    unops = ['recip', 'sqrt', 'cat']
+    # unops = ['recip', 'sqrt', 'cat']
+    unops = ['sqrt']
     # binops = ['add', 'mul', 'le']
     binops = ['mul']
+    # binops = []
     # ternops = ['if']
     # ternops = ['add3']
     ternops = []
@@ -344,6 +376,7 @@ def main():
     myprog = (('0',), ('0',), 'add', ('0',), ('0',), 'treerec')
 
     candidates = []
+    errs = set()
     if VERIFY:
         for ps in programs:
             for p in ps:
@@ -358,6 +391,7 @@ def main():
                             break
                     except:
                         print(f"ERROR!!! ({x}, {pshow(p)})", file=sys.stderr)
+                        errs.add(p)
                         break
 
     if DEBUG:
@@ -367,7 +401,7 @@ def main():
         for ps in programs:
             print()
             for p in ps:
-                print(pshow(p), p, pfreevars(p))
+                print(pshow(p), p, pfreevars(p), [(x, f(x), t) for (x, t) in spec] if p not in errs else [])
 
         print()
         print(f"nth: dt: {dt}ns")
@@ -376,6 +410,20 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+# TODO: compile mul(cat(3))
+
+# TODO:
+# [ ] Get nary functions to work
+# [ ] Get recursive functions to work
+# [ ] Get list ops to work
+# [ ] Setup infrastructure for using ml to guide search
+# [ ] Setup infrastructure for using rl to guide search
+# [ ] Setup infrastructure for training ml
+# [ ] Setup infrastructure for training rl
+# [ ] Get library learning to work
+# [ ] High performance data structures
+# [ ] Perhaps try version space algebras? Or lattices?
 
 """
 f(0) = 1
