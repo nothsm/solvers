@@ -285,16 +285,25 @@ def penumerate(dsl):
         depth += 1
     return programs
 
+# inv: always exactly 1 freevar in the program
 def pbacktrack(dsl):
     programs = []
     def search(depth, sofar):
         if depth == DEPTH:
-            programs.append(tuple(sofar))
+            programs.append(list(sofar))
         else:
             for op in dsl[1]:
                 sofar.append(op)
                 search(depth + 1, sofar)
                 sofar.pop()
+
+            for op in dsl[2]:
+                for c in dsl[0]:
+                    sofar.append(c)
+                    sofar.append(op)
+                    search(depth + 1, sofar)
+                    sofar.pop()
+                    sofar.pop()
 
     for c in dsl[0]:
         search(0, [c])
@@ -350,9 +359,11 @@ def main():
 
     tic = time.perf_counter_ns()
     # programs = penumerate(dsl)
-    programs = []
-    for p in pbacktrack(dsl):
+    programs = pbacktrack(dsl)
+    for p in programs:
         print(p)
+    # for p in pbacktrack(dsl):
+    #     print(p)
     dt = time.perf_counter_ns() - tic
 
     candidates = []
