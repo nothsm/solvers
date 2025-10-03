@@ -246,7 +246,6 @@ def pcompile(p):
     else:
         raise ValueError(f"nth: pcompile: pcompile doesnt support {narg} args")
 
-# TODO
 def peval(p, env):
     try:
         stack = []
@@ -325,8 +324,9 @@ def pbacktrack(dsl):
     programs = []
     def search(depth, sofar):
         if depth == DEPTH:
-            programs.append(list(sofar))
+            programs.append(PROGRAM_T(sofar))
         else:
+            programs.append(PROGRAM_T(sofar))
             for op in dsl[1]:
                 sofar.append(op)
                 search(depth + 1, sofar)
@@ -396,7 +396,15 @@ def main():
     # programs = penumerate(dsl)
     programs = pbacktrack(dsl)
     for p in programs:
-        print(p, peval(p, {'x': 1, 'y': 2, 'z': 3}))
+        log = [(x, peval(p, {'x': x}), t) for (x, t) in spec]
+        verify = all(fx == t for (_, fx, t) in log)
+        if verify:
+            print(f"{GREEN}", end='')
+        print(p, log, end='')
+        if verify:
+            print(RESET)
+        else:
+            print()
     print(len(programs))
     dt = time.perf_counter_ns() - tic
 
