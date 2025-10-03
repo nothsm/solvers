@@ -144,25 +144,11 @@ def pcompile0(p):
 def pcompile1(p):
     (a, op) = p
 
+    opfn = OPS[op]
     g = pcompile(a)
 
-    # if op == 'recip':
-    #     def f(x):
-    #         return 1 / g(x)
-    # elif op == 'sqrt':
-    #     def f(x):
-    #         return g(x) ** 0.5
-    # elif op == 'cat':
-    #     def f(x):
-    #         v = g(x)
-    #         return (v, v)
-    # else:
-    #     raise ValueError(f"nth: pcompile1: unexpected operation ({op})")
-
-    o = OPS[op]
-
     def f(x):
-        return o(g(x))
+        return opfn(g(x))
 
     return f
 
@@ -172,52 +158,35 @@ def pcompile2(p):
     f1 = pcompile(a1)
     f2 = pcompile(a2)
 
+    opfn = OPS[op]
+
     nfree = len(pfreevars(p))
 
     if nfree <= 1:
-        if op == 'mul':
-            def f(x):
-                return f1(x) * f2(x)
-        else:
-            raise ValueError(f"nth: pcompile2: unexpected operation ({op})")
+        def f(x):
+            return opfn(f1(x), f2(x))
     elif nfree == 2:
+        # TODO: There should be a way to not have to hard-code this
         if len(pfreevars(a1)) == 1 and len(pfreevars(a2)) == 1:
-            if op == 'mul':
-                def f(x):
-                    (x, y) = x
-                    return f1(x) * f2(y)
-            else:
-                raise ValueError(f"nth: pcompile2: unexpected operation ({op})")
+            def f(x):
+                (x, y) = x
+                return opfn(f1(x), f2(y))
         elif len(pfreevars(a1)) == 2 and len(pfreevars(a2)) == 0:
-            if op == 'mul':
-                def f(x1, x2):
-                    return f1(x1, x2) * f2((x1, x2))
+            def f(x1, x2):
+                return opfn(f1(x1, x2), f2((x1, x2)))
         elif len(pfreevars(a1)) == 0 and len(pfreevars(a2)) == 2:
-            if op == 'mul':
-                def f(x1, x2):
-                    return f1((x1, x2)) * f2(x1, x2)
-            else:
-                raise ValueError(f"nth: pcompile2: unexpected operation ({op})")
+            def f(x1, x2):
+                return opfn(f1((x1, x2)), f2(x1, x2))
         else:
-            raise ValueError(f"nth: pcompile2: unexpected combiunation of frevars ({len(pfreevars(a1)), len(pfreevars(a2))})")
+            raise ValueError(f"nth: pcompile2: unexpected combination of frevars ({len(pfreevars(a1)), len(pfreevars(a2))})")
     else:
         raise ValueError(f"nth: pcompile2: unexpected number of free vars ({nfree}), {pshow(p)}")
 
     return f
 
-    # if op == 'add':
-    #     def f(x):
-    #         return f1(x) + f2(x)
-    # elif op == 'mul':
-    #     def f(x):
-    #         return f1(x) * f2(x)
-    # elif op == 'le':
-    #     def f(x):
-    #         return f1(x) <= f2(x)
-    # else:
-    #     raise ValueError(f"nth: pcompile2: unexpected operation ({op})")
-
 def pcompile5(p):
+    raise NotImplementedError("nth: pcompile5 is not yet ready")
+
     (a1, a2, binop, a3, a4, op) = p
 
     test = pcompile(a1)
@@ -339,7 +308,8 @@ def main():
     # unops = ['recip', 'sqrt', 'cat']
     unops = ['sqrt']
     # binops = ['add', 'mul', 'le']
-    binops = ['mul']
+    # binops = ['mul', 'add']
+    binops = ['mul', 'add']
     # binops = []
     # ternops = ['if']
     # ternops = ['add3']
