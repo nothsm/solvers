@@ -383,24 +383,37 @@ def main():
                 except:
                     print(f"BADCOMPILE!!! {pshow(p)}", file=sys.stderr)
                     continue
+                verify = True
                 for (x, t) in spec:
                     try:
                         if f(x) != t:
+                            verify = False
                             break
                     except:
                         print(f"ERROR!!! ({x}, {pshow(p)})", file=sys.stderr)
+                        verify = False
                         errs.add(p)
                         break
+                if verify:
+                    candidates.append((p, f))
 
     if DEBUG:
-        for (p, f) in candidates:
-            print(f"{GREEN}{pshow(p)}{RESET}")
+        print()
+        if candidates:
+            for (p, f) in candidates:
+                print(f"{GREEN}{pshow(p)}{RESET}")
+        else:
+            print("nth: no candidates")
+
 
         for ps in programs:
             print()
             for p in ps:
-                f = pcompile(p)
-                print(pshow(p), p, pfreevars(p), [(x, f(x), t) for (x, t) in spec] if p not in errs else [])
+                try:
+                    f = pcompile(p)
+                    print(pshow(p), p, pfreevars(p), [(x, f(x), t) for (x, t) in spec] if p not in errs else [])
+                except:
+                    pass
 
         print()
         print(f"nth: dt: {dt}ns")
