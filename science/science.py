@@ -15,8 +15,8 @@ import sys
 import time
 import operator as op
 
-import matplotlib.pyplot as plt
-import numpy as np
+# import matplotlib.pyplot as plt
+# import numpy as np
 
 DEBUG = bool(os.getenv('DEBUG', False))
 VERIFY = bool(os.getenv('VERIFY', False))
@@ -373,8 +373,6 @@ def main():
     programs = penumerate(dsl)
     dt = time.perf_counter_ns() - tic
 
-    myprog = (('0',), ('0',), 'add', ('0',), ('0',), 'treerec')
-
     candidates = []
     errs = set()
     if VERIFY:
@@ -401,6 +399,7 @@ def main():
         for ps in programs:
             print()
             for p in ps:
+                f = pcompile(p)
                 print(pshow(p), p, pfreevars(p), [(x, f(x), t) for (x, t) in spec] if p not in errs else [])
 
         print()
