@@ -24,6 +24,9 @@ DEPTH = int(os.getenv('DEPTH', 4))
 SPEC = os.getenv('SPEC', 'add1')
 PRINT_EVERY = int(os.getenv('PRINT_EVERY', 1_000_000))
 
+EVALERR = None
+PROGRAM_T = list
+
 CONSTANTS = ['x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '-1', '-2', '-3', '-4', '-5', '-6', '-7', '-8', '-9']
 UNOPS = ['recip', 'sqrt', 'cat']
 BINOPS = ['add', 'mul', 'eq', 'le']
@@ -39,6 +42,16 @@ OPS = {
     'mul': op.mul,
     'eq': op.eq,
     'le': op.le
+}
+
+ARITIES = {
+    'recip': 1,
+    'sqrt': 1,
+    'cat': 1,
+    'add': 2,
+    'mul': 2,
+    'eq': 2,
+    'le': 2
 }
 
 RED = "\033[91m"
@@ -117,7 +130,7 @@ def pfreevars(p):
             if p in SYMBOLS:
                 freevars.add(p)
         else:
-            assert isinstance(p, tuple)
+            assert isinstance(p, PROGRAM_T)
 
             # constants have no operation
             if len(p) == 1:
@@ -233,44 +246,66 @@ def pcompile(p):
     else:
         raise ValueError(f"nth: pcompile: pcompile doesnt support {narg} args")
 
-def peval():
-    ...
+# TODO
+def peval(p, env):
+    try:
+        stack = []
+        for sym in p:
+            if sym in env:
+                stack.append(env[sym])
+            elif sym in CONSTANTS:
+                stack.append(int(sym))
+            else:
+                assert sym in OPS
+                assert sym in ARITIES
+
+                op = OPS[sym]
+                arity = ARITIES[sym]
+
+                args = []
+                for _ in range(arity):
+                    args.append(stack.pop())
+                stack.append(op(*args))
+        return stack.pop()
+    except:
+        return EVALERR
 
 def penumerate(dsl):
-    programs = [set(), {(c,) for c in dsl[0]}] # start with the constants
-    depth = 2
+    programs = [[], [[c] for c in dsl[0]]] # start with the constants
+    depth = 1
     while depth < DEPTH:
-        ps = set()
+        # ps = set()
+        ps = []
         frontier = [p for ps in programs for p in ps] # frontier is everything we've generated so far
 
         # generate all uops
         for op in dsl[1]:
             for p in frontier:
-                prog = (p, op)
-                ps.add(prog)
+                prog = [p, op]
+                ps.append(prog)
 
         # generate all binops
         for op in dsl[2]:
             for p in frontier:
                 for q in frontier:
-                    prog = (p, q, op)
-                    ps.add(prog)
+                    prog = [p, q, op]
+                    ps.append(prog)
 
         # you get the idea...
         for op in dsl[3]:
             for p in frontier:
                 for q in frontier:
                     for r in frontier:
-                        prog = (p, q, r, op)
-                        ps.add(prog)
+                        prog = [p, q, r, op]
+                        ps.append(prog)
 
         for op in dsl[4]:
             for p in frontier:
                 for q in frontier:
                     for r in frontier:
                         for s in frontier:
-                            prog = (p, q, r, s, op)
-                            ps.add(prog)
+                            prog = [p, q, r, s, op]
+                            ps.append(prog)
 
         for op in dsl[5]:
             for p in frontier:
@@ -278,8 +313,8 @@ def penumerate(dsl):
                     for r in frontier:
                         for s in frontier:
                             for t in frontier:
-                                prog = (p, q, r, s, t, op)
-                                ps.add(prog)
+                                prog = [p, q, r, s, t, op]
+                                ps.append(prog)
 
         programs.append(ps)
         depth += 1
@@ -361,9 +396,8 @@ def main():
     # programs = penumerate(dsl)
     programs = pbacktrack(dsl)
     for p in programs:
-        print(p)
-    # for p in pbacktrack(dsl):
-    #     print(p)
+        print(p, peval(p, {'x': 1, 'y': 2, 'z': 3}))
+    print(len(programs))
     dt = time.perf_counter_ns() - tic
 
     candidates = []
@@ -405,7 +439,7 @@ def main():
                     f = pcompile(p)
                     print(pshow(p), p, pfreevars(p), [(x, f(x), t) for (x, t) in spec] if p not in errs else [])
                 except:
-                    pass
+                    print(p)
 
         print()
         print(f"nth: dt: {dt}ns")
@@ -430,6 +464,8 @@ if __name__ == '__main__':
 # [ ] Perhaps try version space algebras? Or lattices?
 
 """
+probably want to start with bits, then bitvectors, then primitives, then everything else
+
 f(0) = 1
 f(1) = 1
 f(2) = 1
