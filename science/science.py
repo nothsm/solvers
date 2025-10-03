@@ -237,11 +237,11 @@ def peval():
     ...
 
 def penumerate(dsl):
-    programs = [set(), {(c,) for c in dsl[0]}]
+    programs = [set(), {(c,) for c in dsl[0]}] # start with the constants
     depth = 2
     while depth < DEPTH:
         ps = set()
-        frontier = [p for ps in programs for p in ps]
+        frontier = [p for ps in programs for p in ps] # frontier is everything we've generated so far
 
         # generate all uops
         for op in dsl[1]:
@@ -256,7 +256,7 @@ def penumerate(dsl):
                     prog = (p, q, op)
                     ps.add(prog)
 
-        # generate all ternops
+        # you get the idea...
         for op in dsl[3]:
             for p in frontier:
                 for q in frontier:
@@ -264,7 +264,6 @@ def penumerate(dsl):
                         prog = (p, q, r, op)
                         ps.add(prog)
 
-        # generate all quartops
         for op in dsl[4]:
             for p in frontier:
                 for q in frontier:
@@ -273,24 +272,34 @@ def penumerate(dsl):
                             prog = (p, q, r, s, op)
                             ps.add(prog)
 
-        # generate all quinops
         for op in dsl[5]:
             for p in frontier:
                 for q in frontier:
-                    for binop in dsl[2]:
+                    for r in frontier:
                         for s in frontier:
                             for t in frontier:
-                                prog = (p, q, binop, s, t, op)
-                                print(prog)
-                                assert False
+                                prog = (p, q, r, s, t, op)
                                 ps.add(prog)
 
         programs.append(ps)
         depth += 1
     return programs
 
-def pbacktrack():
-    ...
+def pbacktrack(dsl):
+    programs = []
+    def search(depth, sofar):
+        if depth == DEPTH:
+            programs.append(tuple(sofar))
+        else:
+            for op in dsl[1]:
+                sofar.append(op)
+                search(depth + 1, sofar)
+                sofar.pop()
+
+    for c in dsl[0]:
+        search(0, [c])
+
+    return programs
 
 def pevo():
     ...
@@ -316,7 +325,7 @@ def main():
     ternops = []
     # quatops = ['rec']
     # quatops = []
-    quinops = ['treerec']
+    # quinops = ['treerec']
 
     dsl = {
         0: consts,
@@ -340,7 +349,10 @@ def main():
         raise ValueError(f'nth: main: unrecognized spec ({SPEC})')
 
     tic = time.perf_counter_ns()
-    programs = penumerate(dsl)
+    # programs = penumerate(dsl)
+    programs = []
+    for p in pbacktrack(dsl):
+        print(p)
     dt = time.perf_counter_ns() - tic
 
     candidates = []
@@ -374,7 +386,6 @@ def main():
                 print(f"{GREEN}{pshow(p)}{RESET}")
         else:
             print("nth: no candidates")
-
 
         for ps in programs:
             print()
