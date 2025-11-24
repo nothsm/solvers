@@ -234,6 +234,7 @@ def pcompile5(p):
 
     return f
 
+# TODO: This should compile into Python bytecode.
 def pcompile(p):
     narg = len(p) - 1
 
@@ -264,7 +265,7 @@ def peval(p, env):
                 args = []
                 for _ in range(arity):
                     args.append(stack.pop())
-                stack.append(op(*args))
+                stack.append(op(*args)) # TODO: check order of operations
         return stack.pop()
     except:
         return EVALERR
@@ -345,6 +346,10 @@ def pbacktrack(dsl):
 
     return programs
 
+# TODO
+def pverify(program, spec):
+    ...
+
 def pevo():
     ...
 
@@ -394,7 +399,7 @@ def main():
 
     tic = time.perf_counter_ns()
     # programs = penumerate(dsl)
-    programs = pbacktrack(dsl)
+    programs = sorted(pbacktrack(dsl))
     for p in programs:
         log = [(x, peval(p, {'x': x}), t) for (x, t) in spec]
         verify = all(fx == t for (_, fx, t) in log)
@@ -472,6 +477,24 @@ if __name__ == '__main__':
 # [ ] Perhaps try version space algebras? Or lattices?
 
 """
+f(x, y) = mul(x, y)
+f(x, y, z) = (mul(x, y), mul(x, z))
+f(x, y, z) = add(mul(x, y), mul(x, z))
+
+
+f(x, y, z) = add(mul(x, y), mul(x, z))
+[x, y, mul, x, z, mul, add]
+
+[]
+[x]
+[x, y]
+[mul(x, y)]
+[mul(x, y), x]
+[mul(x, y), x, z]
+[mul(x, y), mul(x, z)]
+[add(mul(x, y), mul(x, z))]
+
+
 probably want to start with bits, then bitvectors, then primitives, then everything else
 
 f(0) = 1

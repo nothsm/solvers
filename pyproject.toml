@@ -1,0 +1,16 @@
+[project]
+name = "solvers"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "jax>=0.8.0",
+    "jupyter>=1.1.1",
+    "matplotlib>=3.10.7",
+    "mlx>=0.29.3",
+    "numpy>=2.3.4",
+    "pandas>=2.3.3",
+    "scipy>=1.16.3",
+    "sympy>=1.14.0",
+]

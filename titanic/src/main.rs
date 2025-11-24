@@ -11,6 +11,9 @@ const TRAIN_FILE: &str = "train.csv";
 const TEST_FILE: &str = "test.csv";
 
 const N_VARIABLES: usize = 12;
+const N_TC: usize = 3; /* TODO: I should be able to compute this dynamically. */
+const N_SEX: usize = 2;
+const N_PORT: usize = 3;
 
 /*
  * TODO: These 2 functions do not feel like The Right Thing.
@@ -37,6 +40,215 @@ fn slurp(file: &str) -> std::io::Result<String> {
 }
 
 /*
+ * TODO: Move associated functions to methods.
+ */
+#[repr(C)]
+#[derive(Debug)]
+enum TicketClass {
+    First = 0,
+    Second = 1,
+    Third = 2,
+}
+
+/*
+ * TODO: There must be a shorter way to write this.
+ */
+fn tc_from_int(x: i32) -> Result<TicketClass, &'static str> {
+    /*
+     * Pre: TODO
+     */
+    match x {
+        0 => Ok(TicketClass::First),
+        1 => Ok(TicketClass::Second),
+        2 => Ok(TicketClass::Third),
+        _ => Err("int_to_tc: given int must be 0, 1, or 2"),
+    }
+    /*
+     * Post: TODO
+     */
+}
+
+fn int_from_tc(t: TicketClass) -> i32 {
+    use TicketClass::{First, Second, Third};
+    /*
+     * Pre: TODO
+     */
+    match t {
+        First => 0,
+        Second => 1,
+        Third => 2,
+    }
+    /*
+     * Post: TODO
+     */
+}
+
+/*
+ * TODO: The error message in this function exposes implementation details.
+ */
+fn tc_parse(s: &str) -> Result<TicketClass, &'static str> {
+    /*
+     * Pre: TODO
+     */
+    if let Ok(n) = s.parse::<i32>() {
+        tc_from_int(n - 1)
+    } else {
+        Err(r#"tc_parse: given string must be "1", "2", or "3""#)
+    }
+    /*
+     * Post: TODO
+     */
+}
+
+fn tc_one_hot(t: TicketClass) -> [f32; N_TC] {
+    /*
+     * Pre: TODO
+     */
+    let mut xs = [0.; N_TC];
+    xs[int_from_tc(t) as usize] = 1.;
+    xs
+    /*
+     * Post: TODO
+     */
+}
+
+#[repr(C)]
+#[derive(Debug)]
+enum Sex {
+    Male = 0,
+    Female = 1,
+}
+
+fn sex_from_int(x: i32) -> Result<Sex, &'static str> {
+    /*
+     * Pre: TODO
+     */
+    use Sex::{Female, Male};
+
+    match x {
+        0 => Ok(Male),
+        1 => Ok(Female),
+        _ => Err("sex_from_int: unexpected int"),
+    }
+    /*
+     * Post: TODO
+     */
+}
+
+fn int_from_sex(s: Sex) -> i32 {
+    /*
+     * Pre: TODO
+     */
+    use Sex::{Female, Male};
+
+    match s {
+        Male => 0,
+        Female => 1,
+    }
+    /*
+     * Post: TODO
+     */
+}
+
+fn sex_parse(s: &str) -> Result<Sex, &'static str> {
+    /*
+     * Pre: TODO
+     */
+    use Sex::{Female, Male};
+
+    match s {
+        "male" => Ok(Male),
+        "female" => Ok(Female),
+        _ => Err("sex_parse: unexpected string"),
+    }
+    /*
+     * Post: TODO
+     */
+}
+
+fn sex_one_hot(s: Sex) -> [f32; N_SEX] {
+    /*
+     * Pre: TODO
+     */
+    let mut xs = [0.; N_SEX];
+    xs[int_from_sex(s) as usize] = 1.;
+    xs
+    /*
+     * Post: TODO
+     */
+}
+
+#[repr(C)]
+#[derive(Debug)]
+enum Port {
+    C = 0, /* Cherbourg */
+    Q = 1, /* Queenstown */
+    S = 2, /* Southampton */
+}
+
+fn port_from_int(x: i32) -> Result<Port, &'static str> {
+    /*
+     * Pre: TODO
+     */
+    use Port::{C, Q, S};
+
+    match x {
+        0 => Ok(C),
+        1 => Ok(Q),
+        2 => Ok(S),
+        _ => Err("port_from_int: unexpected int"),
+    }
+    /*
+     * Post: TODO
+     */
+}
+
+fn int_from_port(p: Port) -> i32 {
+    /*
+     * Pre: TODO
+     */
+    use Port::{C, Q, S};
+
+    match p {
+        C => 0,
+        Q => 1,
+        S => 2,
+    }
+    /*
+     * Post: TODO
+     */
+}
+
+fn port_parse(s: &str) -> Result<Port, &'static str> {
+    /*
+     * Pre: TODO
+     */
+    use Port::{C, Q, S};
+
+    match s {
+        "C" => Ok(C),
+        "Q" => Ok(Q),
+        "S" => Ok(S),
+        _ => Err("port_parse: unexpected string"),
+    }
+    /*
+     * Post: TODO
+     */
+}
+
+fn port_one_hot(p: Port) -> [f32; N_PORT] {
+    /*
+     * Pre: TODO
+     */
+    let mut xs = [0.; N_PORT];
+    xs[int_from_port(p) as usize] = 1.;
+    xs
+    /*
+     * Post: TODO
+     */
+}
+
+/*
  * TODO: Change this repr.
  * TODO: I should use Struct-of-Arrays rather than an Array-of-Structs.
  */
@@ -45,16 +257,16 @@ fn slurp(file: &str) -> std::io::Result<String> {
 struct Variable {
     id: i128,
     survived: bool,
-    ticket_class: i128,
+    tc: TicketClass,
     name: String,
-    sex: String,
-    age: Option<f64>,
-    sibling_spouse: i128,
-    parent_child: i128,
-    ticket_no: String,
-    fare: f64,
-    cabin_no: Option<String>,
-    embark_port: String,
+    sex: Sex,
+    age: Option<f32>,
+    sibsp: u32,     /* Sibling + spouse count */
+    parch: u32,     /* Parent + child count */
+    tickno: String, /* Ticket number */
+    fare: f32,
+    cabno: Option<String>, /* Cabin number */
+    port: Port,            /* Port of Embarkation */
 }
 
 #[repr(C)]
@@ -70,35 +282,33 @@ struct Objective {
 fn make_variable(
     id: i128,
     survived: bool,
-    ticket_class: i128,
+    tc: TicketClass,
     name: &str,
-    sex: &str,
-    age: Option<f64>,
-    sibling_spouse: i128,
-    parent_child: i128,
-    ticket_no: &str,
-    fare: f64,
-    cabin_no: Option<&str>,
-    embark_port: &str,
+    sex: Sex,
+    age: Option<f32>,
+    sibsp: u32,
+    parch: u32,
+    tickno: &str,
+    fare: f32,
+    cabno: Option<&str>,
+    port: Port,
 ) -> Variable {
     let name = name.to_string();
-    let sex = sex.to_string();
-    let ticket_no = ticket_no.to_string();
-    let cabin_no = cabin_no.map(|s| s.to_string());
-    let embark_port = embark_port.to_string();
+    let tickno = tickno.to_string();
+    let cabno = cabno.map(|s| s.to_string());
     Variable {
         id,
         survived,
-        ticket_class,
+        tc,
         name,
         sex,
         age,
-        sibling_spouse,
-        parent_child,
-        ticket_no,
+        sibsp,
+        parch,
+        tickno,
         fare,
-        cabin_no,
-        embark_port,
+        cabno,
+        port,
     }
 }
 
@@ -176,16 +386,16 @@ fn variable_parse(s: &str) -> Result<Variable, &'static str> {
     let [
         id,
         survived,
-        ticket_class,
+        tc,
         name,
         sex,
         age,
-        sibling_spouse,
-        parent_child,
+        sibsp,
+        parch,
         ticket,
         fare,
-        cabin_no,
-        embark_port,
+        cabno,
+        port,
     ] = fields
     else {
         todo!()
@@ -197,30 +407,24 @@ fn variable_parse(s: &str) -> Result<Variable, &'static str> {
             .parse::<u32>()
             .expect("variable_parse: failed to parse survived")
             != 0,
-        ticket_class
-            .parse()
-            .expect("variable_parse: failed to parse ticket_class"),
+        tc_parse(tc).expect("variable_parse: failed to parse tc"),
         name,
-        sex,
+        sex_parse(sex).expect("variable_parse: failed to parse sex"),
         if let Ok(a) = age.parse() {
             Some(a)
         } else {
             None
         },
-        sibling_spouse
+        sibsp
             .parse()
-            .expect("variable_parse: failed to parse sibling_spouse"),
-        parent_child
+            .expect("variable_parse: failed to parse sibsp"),
+        parch
             .parse()
-            .expect("variable_parse: failed to parse parent_child"),
+            .expect("variable_parse: failed to parse parch"),
         ticket,
         fare.parse().expect("variable_parse: failed to parse fare"),
-        if cabin_no.len() > 0 {
-            Some(cabin_no)
-        } else {
-            None
-        },
-        embark_port,
+        if cabno.len() > 0 { Some(cabno) } else { None },
+        port_parse(port).expect("variable_parse: failed to parse port"),
     ))
     /*
      * Post: TODO
@@ -252,7 +456,7 @@ fn main() -> std::io::Result<()> {
     println!("{}", &contents[..1000]);
 
     let dataset = csv_parse(&contents).expect("main: csv parse error");
-    println!("{:#?}", &dataset[..]);
+    println!("{:#?}", &dataset[..10]);
 
     Ok(())
 }
@@ -317,18 +521,18 @@ mod test {
                 Variable {
                     id: 1,
                     survived: false,
-                    ticket_class: 3,
+                    tc: Third,
                     name: "Braund, Mr. Owen Harris",
-                    sex: "male",
+                    sex: Male,
                     age: Some(
                         22.0,
                     ),
-                    sibling_spouse: 1,
-                    parent_child: 0,
-                    ticket_no: "A/5 21171",
+                    sibsp: 1,
+                    parch: 0,
+                    tickno: "A/5 21171",
                     fare: 7.25,
-                    cabin_no: None,
-                    embark_port: "S",
+                    cabno: None,
+                    port: S,
                 }"#]],
         );
 
@@ -340,16 +544,16 @@ mod test {
                 Variable {
                     id: 6,
                     survived: false,
-                    ticket_class: 3,
+                    tc: Third,
                     name: "Moran, Mr. James",
-                    sex: "male",
+                    sex: Male,
                     age: None,
-                    sibling_spouse: 0,
-                    parent_child: 0,
-                    ticket_no: "330877",
+                    sibsp: 0,
+                    parch: 0,
+                    tickno: "330877",
                     fare: 8.4583,
-                    cabin_no: None,
-                    embark_port: "Q",
+                    cabno: None,
+                    port: Q,
                 }"#]],
         )
     }
@@ -371,52 +575,52 @@ mod test {
                     Variable {
                         id: 1,
                         survived: false,
-                        ticket_class: 3,
+                        tc: Third,
                         name: "Braund, Mr. Owen Harris",
-                        sex: "male",
+                        sex: Male,
                         age: Some(
                             22.0,
                         ),
-                        sibling_spouse: 1,
-                        parent_child: 0,
-                        ticket_no: "A/5 21171",
+                        sibsp: 1,
+                        parch: 0,
+                        tickno: "A/5 21171",
                         fare: 7.25,
-                        cabin_no: None,
-                        embark_port: "S",
+                        cabno: None,
+                        port: "S",
                     },
                     Variable {
                         id: 2,
                         survived: true,
-                        ticket_class: 1,
+                        tc: First,
                         name: "Cumings, Mrs. John Bradley (Florence Briggs Thayer)",
-                        sex: "female",
+                        sex: Female,
                         age: Some(
                             38.0,
                         ),
-                        sibling_spouse: 1,
-                        parent_child: 0,
-                        ticket_no: "PC 17599",
+                        sibsp: 1,
+                        parch: 0,
+                        tickno: "PC 17599",
                         fare: 71.2833,
-                        cabin_no: Some(
+                        cabno: Some(
                             "C85",
                         ),
-                        embark_port: "C",
+                        port: "C",
                     },
                     Variable {
                         id: 3,
                         survived: true,
-                        ticket_class: 3,
+                        tc: Third,
                         name: "Heikkinen, Miss. Laina",
-                        sex: "female",
+                        sex: Female,
                         age: Some(
                             26.0,
                         ),
-                        sibling_spouse: 0,
-                        parent_child: 0,
-                        ticket_no: "STON/O2. 3101282",
+                        sibsp: 0,
+                        parch: 0,
+                        tickno: "STON/O2. 3101282",
                         fare: 7.925,
-                        cabin_no: None,
-                        embark_port: "S",
+                        cabno: None,
+                        port: "S",
                     },
                 ]"#]],
         );
@@ -429,55 +633,239 @@ mod test {
                     Variable {
                         id: 888,
                         survived: true,
-                        ticket_class: 1,
+                        tc: First,
                         name: "Graham, Miss. Margaret Edith",
-                        sex: "female",
+                        sex: Female,
                         age: Some(
                             19.0,
                         ),
-                        sibling_spouse: 0,
-                        parent_child: 0,
-                        ticket_no: "112053",
+                        sibsp: 0,
+                        parch: 0,
+                        tickno: "112053",
                         fare: 30.0,
-                        cabin_no: Some(
+                        cabno: Some(
                             "B42",
                         ),
-                        embark_port: "S",
+                        port: "S",
                     },
                     Variable {
                         id: 889,
                         survived: false,
-                        ticket_class: 3,
+                        tc: Third,
                         name: "Johnston, Miss. Catherine Helen \"\"Carrie\"\"",
-                        sex: "female",
+                        sex: Female,
                         age: None,
-                        sibling_spouse: 1,
-                        parent_child: 2,
-                        ticket_no: "W./C. 6607",
+                        sibsp: 1,
+                        parch: 2,
+                        tickno: "W./C. 6607",
                         fare: 23.45,
-                        cabin_no: None,
-                        embark_port: "S",
+                        cabno: None,
+                        port: "S",
                     },
                     Variable {
                         id: 890,
                         survived: true,
-                        ticket_class: 1,
+                        tc: First,
                         name: "Behr, Mr. Karl Howell",
-                        sex: "male",
+                        sex: Male,
                         age: Some(
                             26.0,
                         ),
-                        sibling_spouse: 0,
-                        parent_child: 0,
-                        ticket_no: "111369",
+                        sibsp: 0,
+                        parch: 0,
+                        tickno: "111369",
                         fare: 30.0,
-                        cabin_no: Some(
+                        cabno: Some(
                             "C148",
                         ),
-                        embark_port: "C",
+                        port: "C",
                     },
                 ]"#]],
         );
+    }
+
+    #[test]
+    fn tc_from_int_test() {
+        let x = 0;
+        dbg_check(tc_from_int(x), expect!["Ok(First)"]);
+
+        let x = 1;
+        dbg_check(tc_from_int(x), expect!["Ok(Second)"]);
+
+        let x = 2;
+        dbg_check(tc_from_int(x), expect!["Ok(Third)"]);
+
+        let x = 3;
+        dbg_check(
+            tc_from_int(x),
+            expect![[r#"Err("int_to_tc: given int must be 0, 1, or 2")"#]],
+        );
+    }
+
+    #[test]
+    fn int_from_tc_test() {
+        use TicketClass::{First, Second, Third};
+
+        str_check(int_from_tc(First), expect!["0"]);
+        str_check(int_from_tc(Second), expect!["1"]);
+        str_check(int_from_tc(Third), expect!["2"]);
+    }
+
+    #[test]
+    fn tc_parse_test() {
+        let s = "0";
+        dbg_check(
+            tc_parse(s),
+            expect![[r#"Err("int_to_tc: given int must be 0, 1, or 2")"#]],
+        );
+
+        let s = "1";
+        dbg_check(tc_parse(s), expect!["Ok(First)"]);
+
+        let s = "2";
+        dbg_check(tc_parse(s), expect!["Ok(Second)"]);
+
+        let s = "3";
+        dbg_check(tc_parse(s), expect!["Ok(Third)"]);
+
+        let s = "4";
+        dbg_check(
+            tc_parse(s),
+            expect![[r#"Err("int_to_tc: given int must be 0, 1, or 2")"#]],
+        );
+    }
+
+    #[test]
+    fn tc_one_hot_test() {
+        use TicketClass::{First, Second, Third};
+
+        dbg_check(tc_one_hot(First), expect!["[1.0, 0.0, 0.0]"]);
+        dbg_check(tc_one_hot(Second), expect!["[0.0, 1.0, 0.0]"]);
+        dbg_check(tc_one_hot(Third), expect!["[0.0, 0.0, 1.0]"]);
+    }
+
+    #[test]
+    fn sex_from_int_test() {
+        let x = 0;
+        dbg_check(sex_from_int(x), expect!["Ok(Male)"]);
+
+        let x = 1;
+        dbg_check(sex_from_int(x), expect!["Ok(Female)"]);
+
+        let x = 2;
+        dbg_check(
+            sex_from_int(x),
+            expect![[r#"Err("sex_from_int: unexpected int")"#]],
+        );
+
+        let x = 3;
+        dbg_check(
+            sex_from_int(x),
+            expect![[r#"Err("sex_from_int: unexpected int")"#]],
+        );
+    }
+
+    #[test]
+    fn int_from_sex_test() {
+        use Sex::{Female, Male};
+
+        str_check(int_from_sex(Male), expect!["0"]);
+        str_check(int_from_sex(Female), expect!["1"]);
+    }
+
+    #[test]
+    fn sex_parse_test() {
+        let s = "0";
+        dbg_check(
+            sex_parse(s),
+            expect![[r#"Err("sex_parse: unexpected string")"#]],
+        );
+
+        let s = "1";
+        dbg_check(
+            sex_parse(s),
+            expect![[r#"Err("sex_parse: unexpected string")"#]],
+        );
+
+        let s = "male";
+        dbg_check(sex_parse(s), expect!["Ok(Male)"]);
+
+        let s = "female";
+        dbg_check(sex_parse(s), expect!["Ok(Female)"]);
+
+        let s = "4";
+        dbg_check(
+            sex_parse(s),
+            expect![[r#"Err("sex_parse: unexpected string")"#]],
+        );
+    }
+
+    #[test]
+    fn sex_one_hot_test() {
+        use Sex::{Female, Male};
+
+        dbg_check(sex_one_hot(Male), expect!["[1.0, 0.0]"]);
+        dbg_check(sex_one_hot(Female), expect!["[0.0, 1.0]"]);
+    }
+
+    #[test]
+    fn port_from_int_test() {
+        let x = 0;
+        dbg_check(port_from_int(x), expect!["Ok(C)"]);
+
+        let x = 1;
+        dbg_check(port_from_int(x), expect!["Ok(Q)"]);
+
+        let x = 2;
+        dbg_check(port_from_int(x), expect!["Ok(S)"]);
+
+        let x = 3;
+        dbg_check(
+            port_from_int(x),
+            expect![[r#"Err("port_from_int: unexpected int")"#]],
+        );
+    }
+
+    #[test]
+    fn int_from_port_test() {
+        use Port::{C, Q, S};
+
+        str_check(int_from_port(C), expect!["0"]);
+        str_check(int_from_port(Q), expect!["1"]);
+        str_check(int_from_port(S), expect!["2"]);
+    }
+
+    #[test]
+    fn port_parse_test() {
+        let s = "0";
+        dbg_check(
+            port_parse(s),
+            expect![[r#"Err("port_parse: unexpected string")"#]],
+        );
+
+        let s = "1";
+        dbg_check(
+            port_parse(s),
+            expect![[r#"Err("port_parse: unexpected string")"#]],
+        );
+
+        let s = "C";
+        dbg_check(port_parse(s), expect!["Ok(C)"]);
+
+        let s = "Q";
+        dbg_check(port_parse(s), expect!["Ok(Q)"]);
+
+        let s = "S";
+        dbg_check(port_parse(s), expect!["Ok(S)"]);
+    }
+
+    #[test]
+    fn port_one_hot_test() {
+        use Port::{C, Q, S};
+
+        dbg_check(port_one_hot(C), expect!["[1.0, 0.0, 0.0]"]);
+        dbg_check(port_one_hot(Q), expect!["[0.0, 1.0, 0.0]"]);
+        dbg_check(port_one_hot(S), expect!["[0.0, 0.0, 1.0]"]);
     }
 }
 
@@ -492,4 +880,7 @@ mod test {
  * - [ ] How is Vec implemented?
  * - [ ] Write custom String::lines() function.
  * - [ ] Fix project structure in emacs.
+ * - [ ] Writing enum's for each categorical variable is horrifically slow.
+ *       I should be able to generate these with macros.
+ * - [ ] What is the runtime representation of enum's?
  */

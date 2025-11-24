@@ -1,0 +1,5 @@
+/target
+.python-version
+data/*
+*.pyc
+tic/target/*
