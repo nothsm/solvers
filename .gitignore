@@ -3,3 +3,4 @@
 data/*
 *.pyc
 tic/target/*
+advent/data/*
